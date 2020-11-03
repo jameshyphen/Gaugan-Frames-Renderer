@@ -1,5 +1,6 @@
 import base64
 from selenium import webdriver
+# from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -50,6 +51,8 @@ def get_base64_canvas(driver):
 
 def initialize_browser() -> WebDriver:
     print("Initializing Browser: Started")
+    # chrome_options = Options()
+    # chrome_options.add_argument("--headless")  # TODO: Fix headless, for now it doesn't work. Crashes after first run.
     driver: WebDriver = webdriver.Chrome()
     driver.get("http://34.216.122.111/gaugan/")
     driver.maximize_window()
@@ -80,7 +83,7 @@ async def convert_image(driver: WebDriver, image_path: str):
     upload_button: WebElement = driver.find_element_by_id("btnSegmapLoad")
     file_input.send_keys(abs_path)
     time.sleep(2)
-    upload_button.click()
+    upload_button.send_keys(Keys.SPACE)
     convert_button: WebElement = driver.find_element_by_id("render")
     convert_button.send_keys(Keys.SPACE)
     while(not canvas_changed(canvas_base64_base, driver)):
@@ -90,7 +93,6 @@ async def convert_image(driver: WebDriver, image_path: str):
     image_name = image_name_with_ext.split(".")[0]
     convert_path = f"converted_{path}"
     decode_and_save_canvas_base64_as_jpg(canvas_base64, convert_path, image_name)
-
 
 
 async def image_converter_service():
@@ -109,4 +111,3 @@ async def main():
 
 SEGMENT_QUEUE = fill_queue()
 asyncio.run(main())
-
