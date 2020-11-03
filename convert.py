@@ -44,43 +44,52 @@ def set_style_filter(driver: WebDriver):
             default_style: WebElement = driver.find_element_by_id("example2")
             default_style.click()
 
+def get_base64_canvas(driver):
+    canvas: WebElement = driver.find_element_by_id("output")
+    return driver.execute_script("return arguments[0].toDataURL('image/jpg').substring(21);", canvas)
+
 def initialize_browser() -> WebDriver:
     print("Initializing Browser: Started")
     driver: WebDriver = webdriver.Chrome()
     driver.get("http://34.216.122.111/gaugan/")
     driver.maximize_window()
     checkbox = driver.find_element_by_id("myCheck")
+    canvas_base64_base = get_base64_canvas(driver)
     click_checkbox(checkbox)
     print("Initializing Browser: Finished")
     set_style_filter(driver)
+    while(not canvas_changed(canvas_base64_base, driver)):
+        time.sleep(0.1)
     return driver
 
-async def convert_image(driver: WebDriver, image_path: str):
-    abs_path = os.path.abspath(image_path)
-    file_input: WebElement = driver.find_element_by_id("segmapfile")
-    upload_button: WebElement = driver.find_element_by_id("btnSegmapLoad")
-    print("Uploading")
-    file_input.send_keys(abs_path)
-    time.sleep(2)
-    upload_button.click()
-    print("Uploaded")
-    convert_button: WebElement = driver.find_element_by_id("render")
-    convert_button.send_keys(Keys.SPACE)
-    print("Converting")
-    time.sleep(5)
-    canvas: WebElement = driver.find_element_by_id("output")
-    print("Converted")
-    path, image_name_with_ext = image_path.split("/")
-    image_name = image_name_with_ext.split(".")[0]
-    print(f"Path: {path}, Image_with_ext: {image_name_with_ext}, Image name: {image_name}")
-    canvas_base64 = driver.execute_script("return arguments[0].toDataURL('image/jpg').substring(21);", canvas)
+def decode_and_save_canvas_base64_as_jpg(canvas_base64, convert_path, image_name):
     canvas_jpg = base64.b64decode(canvas_base64)
-    print("Decoding")
-    convert_path = f"converted_{path}"
     if not os.path.exists(convert_path):
         os.makedirs(convert_path)
     with open(f"{convert_path}/{image_name}.jpg", 'wb') as f:
         f.write(canvas_jpg)
+
+def canvas_changed(base_canvas, driver):
+    canvas = get_base64_canvas(driver)
+    return base_canvas != canvas
+
+async def convert_image(driver: WebDriver, image_path: str):
+    canvas_base64_base = get_base64_canvas(driver)
+    abs_path = os.path.abspath(image_path)
+    file_input: WebElement = driver.find_element_by_id("segmapfile")
+    upload_button: WebElement = driver.find_element_by_id("btnSegmapLoad")
+    file_input.send_keys(abs_path)
+    time.sleep(2)
+    upload_button.click()
+    convert_button: WebElement = driver.find_element_by_id("render")
+    convert_button.send_keys(Keys.SPACE)
+    while(not canvas_changed(canvas_base64_base, driver)):
+        time.sleep(0.1)
+    canvas_base64 = get_base64_canvas(driver)
+    path, image_name_with_ext = image_path.split("/")
+    image_name = image_name_with_ext.split(".")[0]
+    convert_path = f"converted_{path}"
+    decode_and_save_canvas_base64_as_jpg(canvas_base64, convert_path, image_name)
 
 
 
