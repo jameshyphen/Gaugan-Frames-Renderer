@@ -1,4 +1,5 @@
 import base64
+from os import path
 from selenium import webdriver
 # from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
@@ -7,8 +8,9 @@ from selenium.webdriver.remote.webelement import WebElement
 
 import time
 import asyncio
-import queue
 import os
+
+from typing import List
 """
 
 This script has been written by James Hyphen @ https://github.com/jameshyphen
@@ -20,22 +22,35 @@ Working hand-to-hand with Nvidia's Gaugan, which you can refer to here: http://n
 
 
 MAX_BROWSERS = 1  # TODO: Implement in the future multiple browsers
-SEGMENT_QUEUE: queue.Queue = queue.Queue()
-FOLDER = "01_test_GauGan"  # Folder in which your png frames are located.
+FRAME_LIST: List[str] = []
+FOLDER = "02_test_GauGan"  # Folder in which your png frames are located.
 
 def click_checkbox(checkbox: WebElement):
     print(f"The checkbox type is: {type(checkbox)}")
     checkbox.send_keys(Keys.SPACE)
 
-def fill_queue():
-    QUEUE = queue.Queue()
+def filter_frame_list(frame_list: List[str]):
+    RENDERED_FRAMES: List[str] = []
+    path_convert = f"converted_{FOLDER}"
+    if os.path.exists(path_convert):
+        for filename in os.listdir(path_convert):
+            if filename.endswith(".png"):
+                RENDERED_FRAMES.append(os.path.join(FOLDER, filename))
+            else:
+                continue
+        for rendered_frame in RENDERED_FRAMES:
+            frame_list.remove(rendered_frame)
+    return frame_list
+
+def fill_frame_list():
+    FRAME_ORDER = []
     for filename in os.listdir(FOLDER):
         if filename.endswith(".png"):
-            QUEUE.put(os.path.join(FOLDER, filename))
+            FRAME_ORDER.append(os.path.join(FOLDER, filename))
         else:
             continue
-    print(QUEUE.empty())
-    return QUEUE
+    FRAME_ORDER.sort()
+    return FRAME_ORDER
 
 def set_style_filter(driver: WebDriver):
     for filename in os.listdir(FOLDER):
@@ -47,7 +62,7 @@ def set_style_filter(driver: WebDriver):
 
 def get_base64_canvas(driver):
     canvas: WebElement = driver.find_element_by_id("output")
-    return driver.execute_script("return arguments[0].toDataURL('image/jpg').substring(21);", canvas)
+    return driver.execute_script("return arguments[0].toDataURL('image/png').substring(21);", canvas)
 
 def initialize_browser() -> WebDriver:
     print("Initializing Browser: Started")
@@ -61,16 +76,23 @@ def initialize_browser() -> WebDriver:
     click_checkbox(checkbox)
     print("Initializing Browser: Finished")
     set_style_filter(driver)
-    while(not canvas_changed(canvas_base64_base, driver)):
+    t0 = time.time()
+    t1 = time.time()
+    while(
+        not canvas_changed(canvas_base64_base, driver)
+        and (t1-t0) < 20
+    ):
+        t1 = time.time()
+        print(f"Initial render time: {t1-t0}")
         time.sleep(0.1)
     return driver
 
-def decode_and_save_canvas_base64_as_jpg(canvas_base64, convert_path, image_name):
-    canvas_jpg = base64.b64decode(canvas_base64)
+def decode_and_save_canvas_base64_as_png(canvas_base64, convert_path, image_name):
+    canvas_png = base64.b64decode(canvas_base64)
     if not os.path.exists(convert_path):
         os.makedirs(convert_path)
-    with open(f"{convert_path}/{image_name}.jpg", 'wb') as f:
-        f.write(canvas_jpg)
+    with open(f"{convert_path}/{image_name}.png", 'wb') as f:
+        f.write(canvas_png)
 
 def canvas_changed(base_canvas, driver):
     canvas = get_base64_canvas(driver)
@@ -86,21 +108,32 @@ async def convert_image(driver: WebDriver, image_path: str):
     upload_button.send_keys(Keys.SPACE)
     convert_button: WebElement = driver.find_element_by_id("render")
     convert_button.send_keys(Keys.SPACE)
-    while(not canvas_changed(canvas_base64_base, driver)):
+    print("RENDER BUTTON CLICKED")
+    t0 = time.time()
+    t1 = time.time()
+
+    while(
+        not canvas_changed(canvas_base64_base, driver)
+        and (t1-t0) < 20
+    ):
+        t1 = time.time()
+        print(f"Rendering time: {t1-t0}")
         time.sleep(0.1)
+
     canvas_base64 = get_base64_canvas(driver)
     path, image_name_with_ext = image_path.split("/")
     image_name = image_name_with_ext.split(".")[0]
     convert_path = f"converted_{path}"
-    decode_and_save_canvas_base64_as_jpg(canvas_base64, convert_path, image_name)
+    decode_and_save_canvas_base64_as_png(canvas_base64, convert_path, image_name)
 
 
 async def image_converter_service():
     print("Started image convert service: Started")
     driver = initialize_browser()
     print("Image convert service: Finished initializing browser")
-    while not SEGMENT_QUEUE.empty():
-        image_path = SEGMENT_QUEUE.get()
+    while len(FRAME_LIST)>0:
+        image_path = FRAME_LIST[0]
+        FRAME_LIST.remove(image_path)
         await convert_image(driver, image_path)
 
 async def main():
@@ -109,5 +142,7 @@ async def main():
         tasks.append(image_converter_service())
     await asyncio.gather(*tasks)
 
-SEGMENT_QUEUE = fill_queue()
+FRAME_LIST = fill_frame_list()
+FRAME_LIST = filter_frame_list(FRAME_LIST)
+print(FRAME_LIST)
 asyncio.run(main())
