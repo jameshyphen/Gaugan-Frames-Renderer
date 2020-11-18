@@ -80,7 +80,7 @@ def initialize_browser() -> WebDriver:
     t1 = time.time()
     while(
         not canvas_changed(canvas_base64_base, driver)
-        and (t1-t0) < 20
+        and (t1-t0) < 30
     ):
         t1 = time.time()
         print(f"Initial render time: {t1-t0}")
@@ -114,7 +114,7 @@ async def convert_image(driver: WebDriver, image_path: str):
 
     while(
         not canvas_changed(canvas_base64_base, driver)
-        and (t1-t0) < 20
+        and (t1-t0) < 30
     ):
         t1 = time.time()
         print(f"Rendering time: {t1-t0}")
